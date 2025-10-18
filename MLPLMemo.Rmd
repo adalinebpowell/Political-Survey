@@ -1,0 +1,712 @@
+---
+title: "Machine Learning in Political Science: Project Memo"
+author: "Adaline Powell"
+date: "2025-04-23"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+# Introductions
+
+In this memo, I apply an unsupervised machine learning approach to open-ended responses from a survey on political behaviors and attitudes. Specifically, I aim to identify topics that emerge when respondents explain why they hold a particular level of partisan strength.  Open-ended questions have major drawbacks in that they come with a lot of complexity, and it isn't always easy for researchers to comb through a large number of responses. With the presence of time constraints, machine learning allows for a quicker approach to comb through all of the responses and identify natural clustering without bias. Applying a machine learning approach has a lot of benefits in this situation. One of the main ones is that it helps with the time constraints that come from having to go through every single response. Structural Topic Modeling, in particular, gives us a faster way to sort through the open-ended answers and pick up on common patterns and themes. 
+# Data and Method
+
+Data will be taken from a online survey distributed through Lucid. Participation was voluntary and respondents were provided compensation. In the survey, an experimental design is included and conducted on the partisan strength variable. It manipulates the wording in the second branch of questioning (normal format follows the ANES) and replaces it with softer phrasing, a method commonly used to reduce the effects of social desirability. The survey also includes questions on self-monitoring and age. The main question of concern is an open-ended question that asks respondents to describe what makes them a “strong” or “not-so-strong” Democrat or Republican. 
+
+I will be using Structural Topic Modeling (Roberts et. al, 2014) in order to create topics. This form of modeling allows me to include covariates that I believe will play a role in how the respondents answer these questions. The covariates that I believe will affect the content of these responses include age, self-monitoring, and partisan strength. 
+
+
+# Analysis
+
+
+```{r, include =FALSE}
+call <- read.csv("~/Downloads/925care.csv", comment.char="#")
+call <- call[-c(1, 2), ]
+call <- call[call$DistributionChannel != "preview", ]
+call <- call[call$Q1 != "I do not consent", ]
+
+#https://rpubs.com/hsuemrosen/basic-stm-demo
+```
+
+
+
+
+
+```{r, include = FALSE}
+
+surveyy <- data.frame(matrix(NA, nrow = nrow(call), ncol = 0))
+
+
+surveyy$race <- "Two or more"  
+
+surveyy$race[call$Q73 == "White"] <- "White"
+surveyy$race[call$Q73 == "Hispanic or Latino"] <- "Hispanic or Latino"
+surveyy$race[call$Q73 == "Native American"] <- "Native American"
+surveyy$race[call$Q73 == "Black or African American"] <- "Black"
+
+surveyy$race[surveyy$raceall == "A different racial identity"] <- "Other"
+surveyy$race[surveyy$raceall == "A different racial identity"] <- "Other"
+
+
+table(surveyy$race)
+table(surveyy$raceall)
+
+
+
+surveyy$gender <- NA
+surveyy$gender[call$Q72 == "Woman"] <- 1
+surveyy$gender[call$Q72 == "Man"] <- 0
+
+surveyy$income <- NA
+
+surveyy$income[call$Q74 == "Less than $20,000"] <- 1
+surveyy$income[call$Q74 == "$20,000 - $39,999"] <- 2
+surveyy$income[call$Q74 == "$40,000 - $59,999"] <- 3
+surveyy$income[call$Q74 == "$60,000 - $79,999"] <- 4
+surveyy$income[call$Q74 == "$100,000 - $199,999"] <- 5
+
+
+
+
+surveyy$education <- NA
+
+surveyy$education[call$Q75 == "Less than high school"] <- 0
+surveyy$education[call$Q75 == "High school diploma or equivalent"] <- 0
+surveyy$education[call$Q75 == "Some college"] <- 0
+
+surveyy$education[call$Q75 == "2 year degree"] <- 1
+surveyy$education[call$Q75 == "4 year degree"] <- 1
+
+surveyy$education[call$Q75 == "Master's Degree"] <- 1
+surveyy$education[call$Q75 == "Advanced Degree (PhD, JD, MD, DDS, etc.)"] <- 1
+
+
+
+surveyy$agen <- 2025 - as.numeric(call$Q78)
+
+surveyy$age[surveyy$agen >= 17 & surveyy$agen <= 24] <- "17-24"
+surveyy$age[surveyy$agen >= 25 & surveyy$agen <= 34] <- "25-34"
+surveyy$age[surveyy$agen >= 35 & surveyy$agen <= 44] <- "35-44"
+surveyy$age[surveyy$agen >= 45 & surveyy$agen <= 54] <- "45-54"
+surveyy$age[surveyy$agen >= 55 & surveyy$agen <= 64] <- "55-64"
+surveyy$age[surveyy$agen >= 65 & surveyy$agen <= 74] <- "65-74"
+surveyy$age[surveyy$agen >= 75 & surveyy$agen <= 99] <- "75-99"
+surveyy$age <- factor(
+  surveyy$age,
+  levels = c("17-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-99")
+)
+
+
+## Self Monitoring
+
+surveyy$actor <- NA
+surveyy$actor[call$Q47 == "Poor"] <- 0
+surveyy$actor[call$Q47 == "Fair"] <- 0.33
+surveyy$actor[call$Q47 == "Good"] <- 0.66
+surveyy$actor[call$Q47 == "Excellent"] <- 1
+
+surveyy$impress <- NA
+surveyy$impress[call$ Q45 == "Never"] <- 0
+surveyy$impress[call$ Q45 == "Once in a while"] <- 0.25
+surveyy$impress[call$ Q45 == "Some of the time"] <- 0.5
+surveyy$impress[call$ Q45 == "Most of the time"] <- 0.75
+surveyy$impress[call$ Q45 == "Always"] <- 1
+
+
+surveyy$attention <- NA
+surveyy$attention[call$Q46 == "Never"] <- 0
+surveyy$attention[call$Q46 == "Once in a while"] <- 0.25
+surveyy$attention[call$Q46 == "Some of the time"] <- 0.5
+surveyy$attention[call$Q46 == "Most of the time"] <- 0.75
+surveyy$attention[call$Q46 == "Always"] <- 1
+
+
+surveyy$self_monitoring <- NA
+surveyy$self_monitoring <- (surveyy$actor + surveyy$impress + surveyy$attention) / 3
+## high values = high self montior
+mean(surveyy$self_monitoring, na.rm = TRUE)
+#  binary variable
+surveyy$self_monitoring_b <- ifelse(surveyy$self_monitoring > 0.27, "High Self-Monitor", "Low Self-Monitor")
+
+surveyy$self_monitoring_quartile <- cut(
+  surveyy$self_monitoring,
+  breaks = c(-Inf, 0.1100, 0.2200, 0.4167, Inf),
+  labels = c("Very Low", "Low", "High", "Very High"),
+  right = TRUE
+)
+table(surveyy$self_monitoring_quartile)
+
+
+
+
+surveyy$PID7 <- NA
+
+# dem
+surveyy$PID7[call$Q4 == "Strong"] <- "Strong Democrat"
+surveyy$PID7[call$Q4 == "Not very strong"] <- "Weak Democrat"
+
+#Experiemental group
+
+surveyy$PID7[call$Q5 == "Strong"] <- "Strong Democrat"
+surveyy$PID7[call$Q5 == "Not very strong"] <- "Weak Democrat"
+
+
+surveyy$PID7[call$Q8 == "Strong"] <- "Strong Republican"
+surveyy$PID7[call$Q8 == "Not very strong"] <- "Weak Republican"
+
+#Experiemental group
+surveyy$PID7[call$Q9 == "Strong"] <- "Strong Republican"
+surveyy$PID7[call$Q9 == "Not very strong"] <- "Weak Republican"
+
+
+
+#  Leaners
+surveyy$PID7[call$Q12 == "Democratic"] <- " Leaning Democrat"
+surveyy$PID7[call$Q12 == "Republican"] <- "Leaning Republican"
+
+#Experiemental group
+surveyy$PID7[call$Q13 == "Democratic"] <- " Leaning Democrat"
+surveyy$PID7[call$Q13 == "Republican"] <- "Leaning Republican"
+
+
+
+# Pure independents
+surveyy$PID7[call$Q12 == "Neither"] <- "Independent"
+
+#experiemtnal group
+surveyy$PID7[call$Q13 == "Neither"] <- "Independent"
+
+
+## aff lean
+surveyy$af_lean <- NA
+surveyy$af_lean <- (as.numeric(call$Q18_4) - as.numeric(call$Q19_4))
+
+surveyy$af_lean_dummy <- NA
+surveyy$af_lean_dummy[surveyy$af_lean > 0] <- "dem"
+surveyy$af_lean_dummy[surveyy$af_lean < 0] <- "rep"
+surveyy$af_lean_dummy[surveyy$af_lean == 0] <- "two.click"
+
+
+
+surveyy$rep[call$Q4 == "Strong"] <- 0
+surveyy$rep[call$Q4 == "Not very strong"] <- 0
+surveyy$rep[call$Q5 == "Strong"] <- 0
+surveyy$rep[call$Q5 == "Not very strong"] <- 0
+
+surveyy$rep[call$Q8 == "Strong"] <- 1
+surveyy$rep[call$Q8 == "Not very strong"] <- 1
+
+surveyy$rep[call$Q9 == "Strong"] <- 1
+surveyy$rep[call$Q9 == "Not very strong"] <- 1
+
+
+surveyy$group <- NA
+
+#Control Dem
+surveyy$group[call$Q4 == "Strong"] <- 0
+surveyy$group[call$Q4 == "Not very strong"] <- 0
+
+# Experimental  Dem
+surveyy$group[call$Q5 == "Strong"] <- 1
+surveyy$group[call$Q5 == "Not very strong"] <- 1
+
+#Control  (Rep)
+surveyy$group[call$Q8 == "Strong"] <- 0
+surveyy$group[call$Q8 == "Not very strong"] <- 0
+
+# Experimental  (Rep)
+surveyy$group[call$Q9 == "Strong"] <- 1
+surveyy$group[call$Q9 == "Not very strong"] <- 1
+
+# Control Indep
+surveyy$group[call$Q12 == "Democratic"] <- 0
+surveyy$group[call$Q12 == "Republican"] <- 0
+
+# Experimental Lean
+surveyy$group[call$Q13 == "Democratic"] <- 1
+surveyy$group[call$Q13 == "Republican"] <- 1
+
+# Control pure Ind
+surveyy$group[call$Q12 == "Neither"] <- 0
+
+# Experimental Pure Ind
+surveyy$group[call$Q13 == "Neither"] <- 1
+
+
+
+
+surveyy$partisan_strength <- NA
+
+# p strength
+surveyy$partisan_strength[surveyy$PID7 == "Independent"] <- "Independent"
+surveyy$partisan_strength[surveyy$PID7 == "Leaning Democrat"] <- "Leaning Partisan"
+surveyy$partisan_strength[surveyy$PID7 == "Leaning Republican"] <- "Leaning Partisan"
+surveyy$partisan_strength[surveyy$PID7 == "Weak Democrat"] <- "Weak Partisan"
+surveyy$partisan_strength[surveyy$PID7 == "Weak Republican"] <- "Weak Partisan"
+surveyy$partisan_strength[surveyy$PID7 == "Strong Democrat"] <- "Strong Partisan"
+surveyy$partisan_strength[surveyy$PID7 == "Strong Republican"] <- "Strong Partisan"
+
+surveyy$partisan_strength <- factor(
+  surveyy$partisan_strength,
+  levels = c("Independent", "Leaning Partisan", "Weak Partisan", "Strong Partisan")
+)
+
+
+
+
+surveyy$partisan_strength_num <- NA
+surveyy$partisan_strength_num[surveyy$partisan_strength == "Independent"] <- 1
+surveyy$partisan_strength_num[surveyy$partisan_strength == "Leaning Partisan"] <- 2
+surveyy$partisan_strength_num[surveyy$partisan_strength == "Weak Partisan"] <- 3
+surveyy$partisan_strength_num[surveyy$partisan_strength == "Strong Partisan"] <- 4
+
+surveyy$WMY <- NA
+surveyy$WMY <- paste(
+  call$Q10,
+  call$Q11,
+  call$Q14,
+  call$Q15,
+  call$Q16
+)
+
+
+surveyy$know <- NA
+surveyy$know[call$Q2 == "Yes"] <- "yes"
+surveyy$know[call$Q2 == "No"] <- "no"
+
+table(surveyy$know, surveyy$age)
+
+
+#Who is the current U.S. Vice President?
+surveyy$K1 <- 0
+surveyy$K1[call$Q59 == "JD Vance"] <- 1
+
+#Which party currently has the most members in the U.S. House of Representatives?
+surveyy$K2 <- 0
+surveyy$K2[call$Q58 == "JRepublicans"] <- 1
+
+#How much of a majority is required for the U.S. Congress to override a Presidential veto?"
+surveyy$K3 <- 0
+surveyy$K3[call$Q57 == "2/3"] <- 1
+
+
+#Whose responsibility is it to determine if a law is constitutional?
+surveyy$K4 <- 0
+surveyy$K4[call$Q60 == "Supreme Court"] <- 1
+
+surveyy$Knowledge <- (surveyy$K1 + surveyy$K2 + surveyy$K3 + surveyy$K4)/4
+
+
+
+
+
+
+
+surveyy <- na.omit(surveyy)
+
+library('pacman')
+
+
+
+
+
+# Correcting the issue with the subset function
+survey_s <- subset(surveyy, partisan_strength == "Strong Partisan")  
+survey_m <- subset(surveyy, partisan_strength == "Weak Partisan")
+
+survey <-  rbind(survey_s, survey_m)
+
+survey$strength <- NA
+survey$strength[survey$partisan_strength == "Strong Partisan" ] <- 1
+survey$strength[survey$partisan_strength == "Weak Partisan"] <- 0
+
+
+library('pacman')
+pacman::p_load(foreign, ggplot2, dplyr, tidyr, tidyverse, gridExtra,
+               car, haven, frequency, sjmisc, data.table, sjPlot,
+               stargazer, margins, grid, questionr, rlang, haven, nnet, ggeffects,effects, patchwork, knitr, kableExtra, slam, topicmodels, stm, udpipe, BTM, tm, tidytext, wordcloud) 
+cs3 <- c("#808080", "#FFCCCC", "#FF9999", "#FF6666", "#FF3333", "#CC0000", "#990000")
+
+## https://www.tidytextmining.com/topicmodeling
+```
+
+
+
+
+
+
+```{r, include=FALSE}
+## LDA for exploratory purposes
+
+texts <- tolower(survey$WMY)
+texts <- gsub("[^a-z\\s]", " ", texts)           #  punctuation/numbers
+texts <- gsub("\\s+", " ", texts)                #  multiple spaces
+texts <- trimws(texts)  
+
+
+## cleaning the responses
+corpus <- VCorpus(VectorSource(texts))  ##vector of texts as corpus
+corpus <- tm_map(corpus, removeWords, stopwords("english")) #removes  stopwords like "the", "and", "is"
+
+
+corpus <- tm_map(corpus, stripWhitespace)
+
+dtm <- DocumentTermMatrix(corpus)
+empty_docs <- rowSums(as.matrix(dtm)) == 0
+
+dtm <- dtm[!empty_docs, ]
+
+
+
+```
+
+
+
+```{r, include =FALSE}
+lda_model <- LDA(dtm, k = 5, control = list(seed = 1234))
+# Tidy the LDA model to get the topic-word probabilities (beta)
+
+beta <- tidy(lda_model, matrix = "beta")
+
+top_terms <- beta %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>%  #  5 terms per topic
+  ungroup() %>%
+  arrange(topic, -beta)  
+
+top_terms <- top_terms %>%
+  mutate(term = reorder_within(term, beta, topic))  
+```
+
+
+```{r, include=FALSE}
+
+ggplot(top_terms, aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +  
+  facet_wrap(~ topic, scales = "free") +  
+  labs(x= " Beta", y = "Terms", title = " Top Terms per Topic") +
+  scale_y_reordered()  
+
+
+
+```
+
+
+
+
+
+
+#  Cleaning the Responses
+
+The first step I need to take before running the model is cleaning the responses. textProcessor is a function that cleans the responses by converting words to lowercase, removing stop words, numbers, and punctuation. plotRemoved is a function that provides a visual of three plots: number of words, number of documents, and total number of tokens removed as a function of threshold values. The threshold is the minimum number of documents a word must appear in. Based on that, the y-axis shows how many documents, words, and tokens are removed.
+
+
+
+
+
+```{r}
+
+
+set.seed(23456)
+processed <- textProcessor(documents = survey$WMY, metadata = survey)
+
+
+plotRemoved(processed$documents, lower.thresh = seq(1, 20, by = 2))
+```
+
+
+Next I prepare my data to fit an appropriate form to run a Structual topic model, removing words that appear in fewer than 2 documents. I used a threshold of 2 because of the shorter length of these responses. 
+
+```{r}
+out <- prepDocuments(
+  documents = processed$documents,
+  vocab = processed$vocab,
+  meta = processed$meta,
+  lower.thresh = 2
+)
+
+docs <- out$documents
+vocab <- out$vocab
+meta <- out$meta
+```
+
+
+# The Model
+
+After running the model, I can create a word cloud visual the top words within each topic.
+
+```{r, include=FALSE}
+
+
+modell <- stm(
+  documents = docs,
+  vocab = vocab,
+  K = 5,  # I want 5 topics
+  data = meta,
+  init.type = "Spectral"
+)
+
+cloud(modell, topic = 1, max.words = 10)
+
+
+
+```
+
+```{r}
+cloud(modell, topic = 1, max.words = 10)
+
+
+```
+
+
+
+I can also compare the expected topic proportions and their top words. Topic 5 appears to have the highest proportion with the top words being believe, vote and agree. 
+
+```{r, echo=FALSE}
+
+# Topic proportions in documents
+plot.STM(modell, type = "summary")
+```
+
+In order to visual the term probability within each topic, I can create a matrix.
+
+```{r}
+
+tidy_stm <- tidy(modell, matrix = "beta")
+
+
+
+```
+
+According to the figure below:
+
+- Topic 1: parti, dont, belief
+
+- Topic 2: republican, like, know
+
+- Topic 3: trump, democrat, right
+
+- Topic 4: strong, conserv, valu
+
+- Topic 5: believ, vote, agre
+
+
+```{r, echo=FALSE}
+
+top_terms <- tidy_stm %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+# Plot the top terms for each topic
+p1 <- ggplot(top_terms, aes(x = beta, y = reorder_within(term, beta, topic), fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered() +
+  labs(x = "Beta", y = "Term", title = "Top Terms for Each Topic") +
+  theme_minimal()
+
+
+p1
+
+```
+
+# Covarties
+
+I now move to assess whether different topics emerge when considering different covaraites like age, self-monitioing and treatment group, and their party.
+
+```{r, include =FALSE}
+grou_Age <- stm(
+  documents = docs,
+  vocab = vocab,
+  K = 5,  
+   prevalence = ~ age,
+  data = meta,
+  init.type = "Spectral"
+)
+library(wordcloud)
+
+
+
+plot.STM(grou_Age, type = "summary")
+tidy_stm <- tidy(grou_Age, matrix = "beta")
+
+
+top_terms <- tidy_stm %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+# Plot the top terms for each topic
+p2 <- ggplot(top_terms, aes(x = beta, y = reorder_within(term, beta, topic), fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered() +
+  labs(x = "Beta", y = "Term", title = "Top Terms for Each Topic (Age Covaraite)") +
+  theme_minimal()
+
+
+
+
+```
+
+
+```{r, include =FALSE}
+grou <- stm(
+  documents = docs,
+  vocab = vocab,
+  K = 5,  
+   prevalence = ~ group+ self_monitoring ,
+  data = meta,
+  init.type = "Spectral"
+)
+
+# Topic proportions in documents
+plot.STM(grou, type = "summary")
+
+
+tidy_stm <- tidy(grou, matrix = "beta")
+
+top_terms <- tidy_stm %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+# Plot the top terms for each topic
+p3 <- ggplot(top_terms, aes(x = beta, y = reorder_within(term, beta, topic), fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered() +
+  labs(x = "Beta", y = "Term", title = "Top Terms for Each Topic (Group x Self-Monitroing Covaraite)") +
+  theme_minimal()
+
+
+```
+
+
+
+```{r, include =FALSE}
+rreepp <- stm(
+  documents = docs,
+  vocab = vocab,
+  K = 5,  
+   prevalence = ~ rep ,
+  data = meta,
+  init.type = "Spectral"
+)
+
+# Topic proportions in documents
+plot.STM(rreepp, type = "summary")
+
+
+tidy_stm <- tidy(rreepp, matrix = "beta")
+
+top_terms <- tidy_stm %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+# Plot the top terms for each topic
+p4 <- ggplot(top_terms, aes(x = beta, y = reorder_within(term, beta, topic), fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered() +
+  labs(x = "Beta", y = "Term", title = "Top Terms for Each Topic (Party Covariate)") +
+  theme_minimal()
+
+
+strengthh <- stm(
+  documents = docs,
+  vocab = vocab,
+  K = 5,  
+   prevalence = ~ strength ,
+  data = meta,
+  init.type = "Spectral"
+)
+
+# Topic proportions in documents
+plot.STM(strengthh, type = "summary")
+
+
+tidy_stm <- tidy(strengthh, matrix = "beta")
+
+top_terms <- tidy_stm %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+# Plot the top terms for each topic
+p5 <- ggplot(top_terms, aes(x = beta, y = reorder_within(term, beta, topic), fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered() +
+  labs(x = "Beta", y = "Term", title = "Top Terms for Each Topic (Strength Covariate)") +
+  theme_minimal()
+```
+
+After controlling for age, part, and partisan strength, slightly different topics emerge.
+
+```{r, echo=FALSE}
+
+p2
+plot.STM(grou_Age, type = "summary")
+
+
+
+p4
+plot.STM(rreepp, type = "summary")
+
+
+
+
+
+p5
+plot.STM(strengthh, type = "summary")
+
+```
+
+
+
+
+When controlling for age, the topic with the highest expected proportion is Topic 5, which includes the words believe, vote, and agree. The remaining topics have relatively similar proportions. Topic 3 contains terms like Democrat, Trump, and right; Topic 2 includes Republican, like, and know; and Topic 4 features strong, conservative, and value.
+
+When controlling for party, Topic 5 again includes the words believe, vote, and agree, consistent with the results from the age covariate model. Topic 3 focuses on Democrat, Trump, and right, while Topic 2 includes Republican, like, and know. Topic 1 contains party, don't, and belief, and Topic 4 again highlights strong, conservative, and value. These topics all appear with roughly similar expected proportions.
+
+When accounting for partisan strength, Topic 1 shows the highest expected topic proportion, including terms like party, agree, and don't. It is followed by Topic 3 (Democrat, Trump, right) and Topic 4 (strong, conservative, value). Topic 2 contains Republican, support, and no, while Topic 5 includes believe, vote, and America.
+
+
+
+# Discussion
+
+Overall, the results suggest the topic that dominates when controlling for age and party has top words including believe, vote, and agree. When asked what makes respondents a specific level of partisan strength, they tend to resort to themes of civic engagement and are belief orientated.  However, when controlling for partisan strength, a topic with terms such as party, agree, and don’t becomes more prevalent. Therefore, when considering respondents' partisan strengths, the topics that emerge to explain their self-identified strength often center around discussions of party affiliation, and agreement or disagreement.
+
+
+# Conclusion 
+
+Open-ended questions have major drawbacks because they come with a lot of complexity, and it isn't always easy for researchers to comb through a large number of responses. Due to time constraints, machine learning allows for a quicker approach to comb through all of the responses and identify natural clustering without bias. This approach would be particularly beneficial when interested in first hand accounts on any particular political issue and policy implementation. However, a drawback to this approach is that the terms alone do not provide a complete picture of the responses. Furthermore, the terms 'party' and 'belief' occurring together can imply multiple meanings, therefore, additional research may be necessary to understand the responses more thoroughly.
+
+
+### Sources
+- https://rpubs.com/hsuemrosen/basic-stm-demo
+- https://cran.r-project.org/web/packages/stm/vignettes/stmVignette.pdf
+- https://cran.r-project.org/web/packages/stm/index.html
+- https://warin.ca/shiny/stm/#section-ingest
+- Roberts, M. E., Stewart, B. M., & Tingley, D. (2019). stm: An R Package for Structural Topic Models. Journal of Statistical Software, 91(2), 1–40. https://doi.org/10.18637/jss.v091.i02
+
+
+```{r, include=FALSE}
+findThoughts(model = modell, texts = meta$WMY, topics = 1, n = 5)
+findThoughts(model = grou_Age, texts = meta$WMY, topics = 1, n = 5)
+findThoughts(model = rreepp, texts = meta$WMY, topics = 1, n = 5)
+findThoughts(model = strengthh, texts = meta$WMY, topics = 1, n = 5)
+
+```
+
