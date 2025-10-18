@@ -1,0 +1,635 @@
+---
+title: "Memo"
+author: "Adaline Powell"
+date: "2025-04-14"
+output: html_document
+---
+
+
+
+```{r, include =FALSE}
+call <- read.csv("~/Downloads/925care.csv", comment.char="#")
+#call1 <- read.csv("~/Downloads/935 Call Project_April 24, 2025_19.18.csv", comment.char="#")
+
+call[1, ]
+t(call[1, ])
+#t(call1[1, ])
+
+
+call <- call[-c(1, 2), ]
+
+## remove preview from
+#call$DistributionChannel
+
+call <- call[call$DistributionChannel != "preview", ]
+
+## remove I do not consent
+#call$Q1
+
+call <- call[call$Q1 != "I do not consent", ]
+
+#remove row 2 and 3
+
+
+
+```
+
+
+```{r, include = FALSE}
+
+survey <- data.frame(matrix(NA, nrow = nrow(call), ncol = 0))
+
+survey$raceall <- call$Q73
+survey$race <- ifelse(survey$raceall == "White", 0, 1)
+
+survey$gender <- NA
+survey$gender[call$Q72 == "Woman"] <- 1
+survey$gender[call$Q72 == "Man"] <- 0
+
+survey$income <- NA
+
+survey$income[call$Q74 == "Less than $20,000"] <- 1
+survey$income[call$Q74 == "$20,000 - $39,999"] <- 2
+survey$income[call$Q74 == "$40,000 - $59,999"] <- 3
+survey$income[call$Q74 == "$60,000 - $79,999"] <- 4
+survey$income[call$Q74 == "$100,000 - $199,999"] <- 5
+
+
+
+
+survey$education <- NA
+
+survey$education[call$Q75 == "Less than high school"] <- 0
+survey$education[call$Q75 == "High school diploma or equivalent"] <- 0
+survey$education[call$Q75 == "Some college"] <- 0
+
+survey$education[call$Q75 == "2 year degree"] <- 1
+survey$education[call$Q75 == "4 year degree"] <- 1
+
+survey$education[call$Q75 == "Master's Degree"] <- 1
+survey$education[call$Q75 == "Advanced Degree (PhD, JD, MD, DDS, etc.)"] <- 1
+
+
+
+survey$agen <- 2025 - as.numeric(call$Q78)
+
+survey$age[survey$agen >= 17 & survey$agen <= 24] <- "17-24"
+survey$age[survey$agen >= 25 & survey$agen <= 34] <- "25-34"
+survey$age[survey$agen >= 35 & survey$agen <= 44] <- "35-44"
+survey$age[survey$agen >= 45 & survey$agen <= 54] <- "45-54"
+survey$age[survey$agen >= 55 & survey$agen <= 64] <- "55-64"
+survey$age[survey$agen >= 65 & survey$agen <= 74] <- "65-74"
+survey$age[survey$agen >= 75 & survey$agen <= 99] <- "75-99"
+survey$age <- factor(
+  survey$age,
+  levels = c("17-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-99")
+)
+
+## Self Monitoring
+
+survey$actor <- NA
+survey$actor[call$Q47 == "Poor"] <- 0
+survey$actor[call$Q47 == "Fair"] <- 0.33
+survey$actor[call$Q47 == "Good"] <- 0.66
+survey$actor[call$Q47 == "Excellent"] <- 1
+
+survey$impress <- NA
+survey$impress[call$ Q45 == "Never"] <- 0
+survey$impress[call$ Q45 == "Once in a while"] <- 0.25
+survey$impress[call$ Q45 == "Some of the time"] <- 0.5
+survey$impress[call$ Q45 == "Most of the time"] <- 0.75
+survey$impress[call$ Q45 == "Always"] <- 1
+
+
+survey$attention <- NA
+survey$attention[call$Q46 == "Never"] <- 0
+survey$attention[call$Q46 == "Once in a while"] <- 0.25
+survey$attention[call$Q46 == "Some of the time"] <- 0.5
+survey$attention[call$Q46 == "Most of the time"] <- 0.75
+survey$attention[call$Q46 == "Always"] <- 1
+
+
+survey$self_monitoring <- NA
+survey$self_monitoring <- (survey$actor + survey$impress + survey$attention) / 3
+## high values = high self montior
+mean(survey$self_monitoring, na.rm = TRUE)
+#  binary variable
+survey$self_monitoring_b <- ifelse(survey$self_monitoring > 0.27, "High Self-Monitor", "Low Self-Monitor")
+
+survey$self_monitoring_quartile <- cut(
+  survey$self_monitoring,
+  breaks = c(-Inf, 0.1100, 0.2200, 0.4167, Inf),
+  labels = c("Very Low", "Low", "High", "Very High"),
+  right = TRUE
+)
+table(survey$self_monitoring_quartile)
+
+
+
+
+survey$PID7 <- NA
+
+# dem
+survey$PID7[call$Q4 == "Strong"] <- "Strong Democrat"
+survey$PID7[call$Q4 == "Not very strong"] <- "Weak Democrat"
+
+#Experiemental group
+
+survey$PID7[call$Q5 == "Strong"] <- "Strong Democrat"
+survey$PID7[call$Q5 == "Not very strong"] <- "Weak Democrat"
+
+
+survey$PID7[call$Q8 == "Strong"] <- "Strong Republican"
+survey$PID7[call$Q8 == "Not very strong"] <- "Weak Republican"
+
+#Experiemental group
+survey$PID7[call$Q9 == "Strong"] <- "Strong Republican"
+survey$PID7[call$Q9 == "Not very strong"] <- "Weak Republican"
+
+
+
+#  Leaners
+survey$PID7[call$Q12 == "Democratic"] <- " Leaning Democrat"
+survey$PID7[call$Q12 == "Republican"] <- "Leaning Republican"
+
+#Experiemental group
+survey$PID7[call$Q13 == "Democratic"] <- " Leaning Democrat"
+survey$PID7[call$Q13 == "Republican"] <- "Leaning Republican"
+
+
+
+# Pure independents
+survey$PID7[call$Q12 == "Neither"] <- "Independent"
+
+#experiemtnal group
+survey$PID7[call$Q13 == "Neither"] <- "Independent"
+
+
+survey$group <- NA
+
+#Control Dem
+survey$group[call$Q4 == "Strong"] <- 0
+survey$group[call$Q4 == "Not very strong"] <- 0
+
+# Experimental  Dem
+survey$group[call$Q5 == "Strong"] <- 1
+survey$group[call$Q5 == "Not very strong"] <- 1
+
+#Control  (Rep)
+survey$group[call$Q8 == "Strong"] <- 0
+survey$group[call$Q8 == "Not very strong"] <- 0
+
+# Experimental  (Rep)
+survey$group[call$Q9 == "Strong"] <- 1
+survey$group[call$Q9 == "Not very strong"] <- 1
+
+# Control Indep
+survey$group[call$Q12 == "Democratic"] <- 0
+survey$group[call$Q12 == "Republican"] <- 0
+
+# Experimental Lean
+survey$group[call$Q13 == "Democratic"] <- 1
+survey$group[call$Q13 == "Republican"] <- 1
+
+# Control pure Ind
+survey$group[call$Q12 == "Neither"] <- 0
+
+# Experimental Pure Ind
+survey$group[call$Q13 == "Neither"] <- 1
+
+survey$partisan_strength <- NA
+
+# p strength
+survey$partisan_strength[survey$PID7 == "Independent"] <- "Independent"
+survey$partisan_strength[survey$PID7 == "Leaning Democrat"] <- "Leaning Partisan"
+survey$partisan_strength[survey$PID7 == "Leaning Republican"] <- "Leaning Partisan"
+survey$partisan_strength[survey$PID7 == "Weak Democrat"] <- "Weak Partisan"
+survey$partisan_strength[survey$PID7 == "Weak Republican"] <- "Weak Partisan"
+survey$partisan_strength[survey$PID7 == "Strong Democrat"] <- "Strong Partisan"
+survey$partisan_strength[survey$PID7 == "Strong Republican"] <- "Strong Partisan"
+
+# ordered factor
+survey$partisan_strength <- factor(
+  survey$partisan_strength,
+  levels = c("Independent", "Leaning Partisan", "Weak Partisan", "Strong Partisan")
+)
+
+# Numeric 
+survey$partisan_strength_num <- NA
+survey$partisan_strength_num[survey$partisan_strength == "Independent"] <- 1
+survey$partisan_strength_num[survey$partisan_strength == "Leaning Partisan"] <- 2
+survey$partisan_strength_num[survey$partisan_strength == "Weak Partisan"] <- 3
+survey$partisan_strength_num[survey$partisan_strength == "Strong Partisan"] <- 4
+
+survey$WMY <- NA
+survey$WMY <- paste(
+  call$Q10,
+  call$Q11,
+  call$Q14,
+  call$Q15,
+  call$Q16
+)
+```
+
+
+
+
+
+```{r}
+survey <- na.omit(survey)
+
+library('pacman')
+pacman::p_load(foreign, ggplot2, dplyr, tidyr, tidyverse, gridExtra,
+               car, haven, frequency, sjmisc, data.table, sjPlot,
+               stargazer, margins, grid, questionr, rlang, haven, nnet, ggeffects, patchwork, knitr, kableExtra) 
+
+cs3 <- c("#808080", "#FFCCCC", "#FF9999", "#FF6666", "#FF3333", "#CC0000", "#990000")
+
+## Descriptives
+
+ggplot(survey, aes(x = age)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Age Distribution", x = "Age Group", y = "Count") +
+  theme_minimal()
+
+
+## PID Strength
+ggplot(survey, aes(x = partisan_strength)) +
+  geom_bar(fill = "darkred") +
+  labs(title = "Partisanship Strength Distribution", x = "Partisanship Strength", y = "Count") +
+  theme_minimal()
+
+## self monitoring
+mean_self_monitoring <- mean(survey$self_monitoring, na.rm = TRUE)
+median_self_monitoring <- median(survey$self_monitoring, na.rm = TRUE)
+
+ggplot(survey, aes(x = self_monitoring)) +
+  geom_density(fill = "skyblue", alpha = 0.6) +
+  geom_vline(xintercept = mean_self_monitoring, color = "red", linetype = "dashed", size = 1.2) +
+  geom_vline(xintercept = median_self_monitoring, color = "blue", linetype = "dotted", size = 1.2) +
+  labs(title = "Density Plot of Self-Monitoring Scores",
+       x = "Self-Monitoring Score",
+       y = "Density",
+       caption = "Red dashed line = Mean | Blue dotted line = Median") +
+  theme_minimal()
+
+## Groups
+ggplot(survey, aes(x = group, fill = age)) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = cs3) +
+  labs(title = "Experimetnal Group by Age", x = "Group", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+## self-monitoring and age
+ggplot(survey, aes(x = self_monitoring, fill = age)) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = cs3) +
+  labs(title = "Self-Monitoring by Age", x = "Self-Monitoring", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(survey, aes(x = self_monitoring)) +
+  geom_bar(fill = "skyblue") +
+  facet_wrap(~ age) +
+  labs(title = "Self-Monitoring across Age Groups", x = "Self-Monitoring", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+## self-monitoring and partisan_strength
+ggplot(survey, aes(x = self_monitoring, fill = partisan_strength)) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = cs3) +
+  labs(title = "Self-Monitoring by Partisan Strength", x = "Self-Monitoring", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(survey, aes(x = self_monitoring)) +
+  geom_bar(fill = "steelblue") +
+  facet_wrap(~ partisan_strength) +
+  labs(title = "Self-Monitoring across Partisan Strength Groups", x = "Self-Monitoring", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+ggplot(survey, aes(x = partisan_strength, fill = age)) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = cs3) +
+  labs(title = "Partisanship Strength by Age Group", x = "Partisanship Strength", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+
+```{r}
+# Self-Monitoring by Age Group How self-monitoring varies across ages
+ggplot(survey, aes(x = age, y = self_monitoring)) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(title = "Self-Monitoring Scores Across Age Groups",
+       x = "Age Group", y = "Self-Monitoring Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Self-Monitoring by Group (Control vs Experimental) Does self-monitoring differ between experimental groups?
+ggplot(survey, aes(x = factor(group), y = self_monitoring)) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(title = "Self-Monitoring Scores by Experimental Group",
+       x = "Group (0 = Control, 1 = Experimental)", y = "Self-Monitoring Score") +
+  theme_minimal()
+
+
+# Pasrtisan by Group (Control vs Experimental) Does pstrengthdiffer between experimental groups?
+
+ggplot(survey, aes(x = factor(partisan_strength), fill = factor(group))) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ self_monitoring_quartile) +  # Make sure the variable name matches exactly
+  labs(title = "Partisan Strength by Experimental Group and Self-Monitoring Level",
+       x = "Partisan Strength Level",
+       y = "Number of Respondents",
+       fill = "Group") +
+  scale_fill_manual(values = c("0" = "grey", "1" = "orange"),
+                    labels = c("Control", "Experimental")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold"))
+
+
+ggplot(survey, aes(x = factor(partisan_strength), fill = factor(group))) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ age) +  # Make sure the variable name matches exactly
+  labs(title = "Partisan Strength by Experimental Group and Age",
+       x = "Partisan Strength Level",
+       y = "Number of Respondents",
+       fill = "Group") +
+  scale_fill_manual(values = c("0" = "grey", "1" = "blue"),
+                    labels = c("Control", "Experimental")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold"))
+
+
+
+
+# Self-Monitoring by Group (Control vs Experimental) Does self-monitoring differ between experimental groups?
+ggplot(survey, aes(x = factor(group), y = self_monitoring)) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+    facet_wrap(~ partisan_strength) +
+  labs(title = "Self-Monitoring Scores by Experimental Group",
+       x = "Group (0 = Control, 1 = Experimental)", y = "Self-Monitoring Score") +
+  theme_minimal()
+
+```
+
+# Low self-monitors (especially in the "Low" group) show a bigger difference between Experimental and Control. Experimental respondents seem more likely to report being Strong Partisans.
+
+
+```{r}
+
+
+tapply(survey$self_monitoring, survey$group, mean, na.rm = TRUE)
+tapply(survey$partisan_strength_num, survey$group, mean, na.rm = TRUE)
+
+aggregate(partisan_strength_num ~ group + self_monitoring + age, data = survey, FUN = mean, na.rm = TRUE)
+
+```
+
+
+
+
+
+
+
+```{r}
+dd <- c("17-24", "25-34", "35-44", "45-54", "55-64", "65-74", "75-99")
+p <- c("Independent", "Weak Partisan", "Leaning Partisan", "Strong Partisan")
+
+study1v2 <- multinom(partisan_strength ~ agen + race + gender + income + education, data = survey)
+
+nomralmodel <- multinom(partisan_strength ~ agen + race + gender + income + education + self_monitoring + group, data = survey)
+self_groupmn <- multinom(partisan_strength ~ agen + race + gender + income + education + self_monitoring * group, data = survey)
+self_agemn <- multinom(partisan_strength ~  race + gender + income + education + self_monitoring*agen + group, data = survey)
+allmn <- multinom(partisan_strength ~ race + gender + income + education + self_monitoring_quartile * group * age, data = survey)
+AIC(nomralmodel,self_groupmn,  self_agemn, allmn)
+
+
+
+nomralmodelLM <- lm(partisan_strength_num ~ agen + race + gender + income + education + self_monitoring + group, data = survey)
+summary(nomralmodelLM)$adj.r.squared
+
+self_ageLM <- lm(partisan_strength_num ~  race + gender + income + education + self_monitoring*agen + group, data = survey)
+summary(self_ageLM)$adj.r.squared
+
+
+self_groupLM <- lm(partisan_strength_num ~ agen + race + gender + income + education + self_monitoring * group, data = survey)
+summary(self_groupLM)$adj.r.squared
+
+age_groupm <- lm(partisan_strength_num ~ race + gender + income + education + self_monitoring + group * agen, data = survey)
+summary(age_groupm)$adj.r.squared
+
+
+allLM <- lm(partisan_strength_num ~ race + gender + income + education + self_monitoring * group * agen, data = survey)
+summary(allLM)$adj.r.squared
+
+
+
+```
+
+
+
+```{r}
+
+mn1_pred <- ggpredict(study1v2, terms = c("age"))
+mn1_pred$x <- factor(mn1_pred$x, levels = dd)
+mn1_pred$response.level <- factor(mn1_pred$response.level, levels= p)
+
+
+```
+
+
+
+
+
+```{r}
+
+plot2 <- ggplot(mn1_pred, aes(x = x, y = predicted, colour = response.level)) +
+  geom_jitter(shape = 19, width = 0.1, size = 3) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  scale_color_manual(values = c(
+    "Strong Partisan" = "#0044CC",         
+    "Weak Partisan" = "#6699FF",           
+    "Leaning Partisan" = "#99CCFF",  
+    "Independent" = "#808080"       
+  ),
+  breaks = c(
+    'Strong Partisan',     
+    'Weak Partisan',       
+    'Leaning Partisan',
+    'Independent')) +
+  labs(x = "Age",
+       y = "Predicted Probability",
+       colour = "Response\nCategory",
+       title = "Figure 1: Predicted Party Strength by Age")+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plot
+plot2
+```
+
+
+
+
+```{r}
+par(mfrow = c(1, 4))  
+plot(allLM)
+# Shapiro-Wilk Test for Normality of residuals
+shapiro.test(residuals(allLM))
+summary(age_groupm)
+tab_model(
+  nomralmodelLM,
+  self_ageLM,
+  self_groupLM,
+  age_groupm,
+  allLM,        # show standard errors
+  digits = 2,             # round to 3 decimal places
+  dv.labels = c(
+    "Main Effects Only",
+    "Self-Monitoring × Age Interaction",
+    "Self-Monitoring × Group Interaction",
+    "Group × Age Interaction",
+    "Self-Monitoring × Group × Age Interaction"
+  ),
+  pred.labels = c(
+    "(Intercept)",
+    "Age",
+    "Race (0 = White, 1 = Non-White)",
+    "Gender (0 = Male, 1 = Female)", 
+    "Income",
+    "Education",
+    "Self-Monitoring",
+    "Group (0 = Control, 1 = Experimental)",
+    "Self-Monitoring × Age",
+    "Self-Monitoring × Group",
+    "Group × Age",
+    "Self-Monitoring × Group × Age"
+  ),
+  title = "Regression Models Predicting Partisan Strength"
+)
+
+```
+
+
+
+```{r}
+library(effects)
+# Plot the 3-way interaction self_monitoring * group * agen
+effect_plot <- Effect(c("self_monitoring", "group"), allLM)
+
+# Plot it
+plot(effect_plot,
+     multiline = TRUE,          # separate lines for group
+     ci.style = "bands",         # confidence intervals as bands
+     rug = FALSE,                # no rug plot for data points
+     ylab = "Predicted Partisan Strength",
+     xlab = "Self-Monitoring",
+     main = "Effect of Self-Monitoring, Group, and Age on Partisan Strength")
+
+
+
+
+effect_plot <- Effect(c("self_monitoring", "group"), allmn)
+
+plot(effect_plot,
+     multiline = TRUE,
+     ci.style = "bands",
+     rug = FALSE,
+     ylab = "Predicted Probability",
+     xlab = "Self-Monitoring",
+     main = "Effect of Self-Monitoring and Group on Partisan Strength")
+all_effects <- allEffects(allmn)
+
+# Plot all effects
+plot(all_effects)
+
+# Correct way
+plot(all_effects[["self_monitoring:group:agen"]],
+     multiline = TRUE,
+     ci.style = "bands",
+     rug = FALSE,
+     ylab = "Predicted Probability",
+     xlab = "Self-Monitoring",
+     main = "Interaction: Self-Monitoring × Group × Age")
+
+```
+
+
+
+
+
+```{r}
+
+kruskal_test_result <- kruskal.test(partisan_strength_num ~ group, data = survey)
+
+kruskal_test_result
+
+pairwise_comparisons <- pairwise.wilcox.test(survey$partisan_strength_num, 
+                                              survey$group, 
+                                              p.adjust.method = "bonferroni")                                             
+                                             
+                                             
+print(pairwise_comparisons)
+
+
+# p = 0.428 > 0.05 There is no significant difference in partisan strength distribution between the control and experimental groups.
+#Using non-parametric tests, you also find that there is no significant difference in partisan strength between control and experimental groups. The data does not support the idea that the softer question wording changed overall partisan strength scores.
+
+
+```
+
+
+
+```{r}
+## does selfmontioring differ across age groups
+anova_age_self <- aov(self_monitoring ~ age, data = survey)
+summary(anova_age_self)
+
+#anova is singicant p < 0.05 now we need to find out which age group differs, TukeyHSD
+TukeyHSD(anova_age_self)
+
+
+#65-74 group has lower self-monitoring than 25-34 group
+# 75-99 group has lower self-monitoring than 25-34 group
+# 65-74 group has lower self-monitoring than 35-44 group
+# 75-99 group has lower self-monitoring than 35-44 group
+#older adults (65-74 and 75-99) have significantly lower self-monitoring compared to young/middle adults (25-44 years old).
+
+```
+
+
+
+```{r}
+ktr <- kruskal.test(partisan_strength_num ~ age, data = survey)
+
+ktr
+
+pair_strengthage <- pairwise.wilcox.test(survey$partisan_strength_num, 
+                                              survey$age, 
+                                              p.adjust.method = "bonferroni")                                             
+                                             
+                                             
+print(pair_strengthage)
+```
+
+
+
+
+
+
+
